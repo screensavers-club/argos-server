@@ -4,17 +4,19 @@ const AccessToken = livekitApi.AccessToken;
 const RoomServiceClient = livekitApi.RoomServiceClient;
 const express = require("express");
 const cors = require("cors");
+const generateRoomNames = require("./util/generateRoomNames");
 
 const app = express();
 
 app.use(cors());
 
-const livekitHost = "http://localhost:7880";
 const svc = new RoomServiceClient(
-  livekitHost,
+  process.env.LIVEKIT_HOST,
   process.env.LIVEKIT_API_KEY,
   process.env.LIVEKIT_API_SECRET
 );
+
+console.log(svc);
 
 app.get("/", (req, res) => {
   const roomName = "name-of-room";
@@ -38,6 +40,21 @@ app.get("/", (req, res) => {
 
 app.get("/rooms", (req, res) => {
   svc.listRooms().then((result) => res.send(result));
+});
+
+app.get("/generate-room-name", (req, res) => {
+  svc.listRooms().then((rooms) => {
+    const candidates = generateRoomNames();
+    const firstCandidate = candidates.find(
+      (c) => !rooms.find((room) => room.name === c)
+    );
+
+    if (firstCandidate) {
+      res.send(firstCandidate);
+    } else {
+      res.send({ err: "Couldn't generate a room name. Try again" });
+    }
+  });
 });
 
 app.get("/participants", (req, res) => {
