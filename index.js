@@ -21,11 +21,18 @@ const FrontDesk = {
   hasRoom: function ({ room }) {
     return this._rooms.findIndex((r) => r.name === room) > -1;
   },
-  accessRoom: function ({ room, passcode }) {
-    const _room = this._rooms.find((room) => room.name === room);
+
+	inspectRooms: function() { return this._rooms},
+  accessRoom: function ({ room :roomName, passcode }) {
+
+
+    const _room = this._rooms.find((room) => room.name === roomName);
+	  console.log(_room)
     if (!_room) {
       return false;
     }
+
+	  console.log(_room.passcode , passcode);
     return _room.passcode === passcode;
   },
 };
@@ -161,6 +168,10 @@ app.post("/child/room/join", (req, res) => {
     res.send({ token });
   });
 });
+
+app.get('/inspect-rooms', (req, res) => {res.send(FrontDesk.inspectRooms());}
+
+);
 
 app.listen(3001);
 
