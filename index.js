@@ -15,7 +15,6 @@ app.use(express.json());
 const FrontDesk = {
   _rooms: [],
   addRoom: function ({ room, passcode }) {
-    console.log(room, passcode);
     this._rooms.push({ name: room, passcode });
   },
 
@@ -24,7 +23,6 @@ const FrontDesk = {
   },
 
   inspectRooms: function () {
-    console.log(svc);
     return this._rooms;
   },
   accessRoom: function ({ room: roomName, passcode }) {
@@ -154,6 +152,24 @@ app.post(
   }
 );
 
+app.post("/child/participant/set-nickname", (req, res) => {
+	let {nickname, identity, room} = req.body;
+	svc.updateParticipant(room, identity, JSON.stringify( {type:"CHILD", nickname} ))
+		.then( result => {
+			if (result) {
+				console.log(({type:"CHILD", nickname}));
+				res.status(200).send({success: true});
+				return;
+			} else {
+				res.status(403).send({err: "Set nickname failed"});
+				return;
+			}
+		}).catch( err => {
+			console.log(err);
+			res.status(403).send({err, message: "Set nickname failed"})
+		});
+});
+
 app.get("/inspect-rooms", (req, res) => {
   res.send(FrontDesk.inspectRooms());
 });
@@ -166,7 +182,7 @@ const createParentToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity,
-      metadata: "PARENT",
+      metadata: JSON.stringify({type: "PARENT"}),
     }
   );
   at.addGrant({
@@ -184,7 +200,7 @@ const createChildToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity,
-      metadata: "CHILD",
+      metadata: JSON.stringify({type: "CHILD"}),
     }
   );
   at.addGrant({
@@ -202,7 +218,7 @@ const createViewerToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity: uuid.v4(),
-      metadata: "VIEWER",
+      metadata: JSON.stringify({type: "VIEWER"}),
     }
   );
   at.addGrant({
