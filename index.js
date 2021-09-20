@@ -15,7 +15,7 @@ app.use(express.json());
 const FrontDesk = {
   _rooms: [],
   addRoom: function ({ room, passcode }) {
-	  console.log(room, passcode);
+    console.log(room, passcode);
     this._rooms.push({ name: room, passcode });
   },
 
@@ -24,8 +24,7 @@ const FrontDesk = {
   },
 
   inspectRooms: function () {
-
-	  console.log(svc);
+    console.log(svc);
     return this._rooms;
   },
   accessRoom: function ({ room: roomName, passcode }) {
@@ -109,19 +108,20 @@ app.post("/parent/room/new", (req, res) => {
     });
 });
 
-app.post(["/parent/room/join", "/child/room/join", "/viewer/room/join"], (req, res) => {
+app.post(
+  ["/parent/room/join", "/child/room/join", "/viewer/room/join"],
+  (req, res) => {
+    let { identity, room, passcode } = req.body;
+    let isChild = req.path === "/child/room/join";
+    let isViewer = req.path === "/viewer/room/join";
 
-  let { identity, room, passcode } = req.body;
-  let isChild = req.path === '/child/room/join';
-  let isViewer = req.path === '/viewer/room/join';
+    if (!FrontDesk.hasRoom({ room })) {
+      res.status(400).send({ err: `No such room ${room}` });
+      return;
+    }
 
-  if (!FrontDesk.hasRoom({ room })) {
-    res.status(400).send({ err: `No such room ${room}` });
-    return;
-  }
-
-  svc.listParticipants(room).then((participants) => {
-	  /*
+    svc.listParticipants(room).then((participants) => {
+      /*
     if (
       !!participants.find((participant) => participant.identity === identity)
     ) {
@@ -132,28 +132,27 @@ app.post(["/parent/room/join", "/child/room/join", "/viewer/room/join"], (req, r
     }
 	  */
 
-    if (!FrontDesk.accessRoom({ room, passcode })) {
-      res.status(403).send({
-        err: `Wrong passcode provided for room ${room}`,
-      });
-      return;
-    }
+      if (!FrontDesk.accessRoom({ room, passcode })) {
+        res.status(403).send({
+          err: `Wrong passcode provided for room ${room}`,
+        });
+        return;
+      }
 
+      let token;
 
-    let token;
-	
-    if (isChild) {
-    	token = createChildToken(identity, room);
-    } else if (isViewer) {
-    	token = createViewerToken(identity, room);
-    } else {
-    	token = createParentToken(identity, room);
-    }
+      if (isChild) {
+        token = createChildToken(identity, room);
+      } else if (isViewer) {
+        token = createViewerToken(identity, room);
+      } else {
+        token = createParentToken(identity, room);
+      }
 
-    res.send({ token });
-  });
-});
-
+      res.send({ token });
+    });
+  }
+);
 
 app.get("/inspect-rooms", (req, res) => {
   res.send(FrontDesk.inspectRooms());
@@ -166,7 +165,8 @@ const createParentToken = (identity, room) => {
     process.env.LIVEKIT_API_KEY,
     process.env.LIVEKIT_API_SECRET,
     {
-      identity,   metadata: "PARENT"
+      identity,
+      metadata: "PARENT",
     }
   );
   at.addGrant({
@@ -184,33 +184,32 @@ const createChildToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity,
-	    metadata: "CHILD"
+      metadata: "CHILD",
     }
   );
   at.addGrant({
     roomJoin: true,
     room: room,
     canPublish: true,
-	  canSubscribe: true,
+    canSubscribe: true,
   });
   return (token = at.toJwt());
 };
-
 
 const createViewerToken = (identity, room) => {
   const at = new AccessToken(
     process.env.LIVEKIT_API_KEY,
     process.env.LIVEKIT_API_SECRET,
     {
-	    identity: uuid.v4(),
-	    metadata: "VIEWER"
+      identity: uuid.v4(),
+      metadata: "VIEWER",
     }
   );
   at.addGrant({
     roomJoin: true,
     room: room,
     canPublish: false,
-	  canSubscribe: true,
+    canSubscribe: true,
   });
   return (token = at.toJwt());
 };
