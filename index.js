@@ -152,6 +152,21 @@ app.post(
   }
 );
 
+app.post("/parent/participant/set-delay", (req, res) => {
+	let {id, delay, room} = req.body;
+	console.log({id, delay, room});
+	svc.getParticipant(room, id).then((child)=>{
+		let  _md = JSON.parse(child.metadata);
+		svc.updateParticipant(room, id, JSON.stringify({
+			... _md,
+			audio_delay: delay
+		})).then(result => {
+			console.log(result);
+			res.status(200).send({success: true});
+		});
+	}).catch(err => res.status(400).send({err}));
+});
+
 app.post("/child/participant/set-nickname", (req, res) => {
 	let {nickname, identity, room} = req.body;
 	svc.updateParticipant(room, identity, JSON.stringify( {type:"CHILD", nickname} ))
