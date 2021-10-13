@@ -47,7 +47,24 @@ app.post("/session/new", (req, res) => {
 });
 
 app.get("/rooms", (req, res) => {
-  svc.listRooms().then((result) => res.send(result));
+  svc.listRooms().then((result) => {
+    const rooms = result;
+    Promise.all(
+      rooms.map(({ name }) => {
+        return svc.listParticipants(name).then((participants) => ({
+          children: participants.filter(
+            (p) => JSON.parse(p.metadata)?.type === "CHILD"
+          ),
+          room: name,
+        }));
+      })
+    )
+      .then((results) => {
+        console.log(results);
+        res.send(results);
+      })
+      .catch((err) => res.status(500).send({ err }));
+  });
 });
 
 app.get("/participants", (req, res) => {
@@ -128,7 +145,7 @@ app.post(
       });
       return;
     }
-	  */
+          */
 
       if (!FrontDesk.accessRoom({ room, passcode })) {
         res.status(403).send({
@@ -153,36 +170,51 @@ app.post(
 );
 
 app.post("/parent/participant/set-delay", (req, res) => {
-	let {id, delay, room} = req.body;
-	console.log({id, delay, room});
-	svc.getParticipant(room, id).then((child)=>{
-		let  _md = JSON.parse(child.metadata);
-		svc.updateParticipant(room, id, JSON.stringify({
-			... _md,
-			audio_delay: delay
-		})).then(result => {
-			console.log(result);
-			res.status(200).send({success: true});
-		});
-	}).catch(err => res.status(400).send({err}));
+  let { id, delay, room } = req.body;
+  console.log({ id, delay, room });
+  svc
+    .getParticipant(room, id)
+    .then((child) => {
+      let _md = JSON.parse(child.metadata);
+      svc
+        .updateParticipant(
+          room,
+          id,
+          JSON.stringify({
+            ..._md,
+            audio_delay: delay,
+          })
+        )
+        .then((result) => {
+          console.log(result);
+          res.status(200).send({ success: true });
+        });
+    })
+    .catch((err) => res.status(400).send({ err }));
 });
 
 app.post("/child/participant/set-nickname", (req, res) => {
-	let {nickname, identity, room} = req.body;
-	svc.updateParticipant(room, identity, JSON.stringify( {type:"CHILD", nickname} ))
-		.then( result => {
-			if (result) {
-				console.log(({type:"CHILD", nickname}));
-				res.status(200).send({success: true});
-				return;
-			} else {
-				res.status(403).send({err: "Set nickname failed"});
-				return;
-			}
-		}).catch( err => {
-			console.log(err);
-			res.status(403).send({err, message: "Set nickname failed"})
-		});
+  let { nickname, identity, room } = req.body;
+  svc
+    .updateParticipant(
+      room,
+      identity,
+      JSON.stringify({ type: "CHILD", nickname })
+    )
+    .then((result) => {
+      if (result) {
+        console.log({ type: "CHILD", nickname });
+        res.status(200).send({ success: true });
+        return;
+      } else {
+        res.status(403).send({ err: "Set nickname failed" });
+        return;
+      }
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(403).send({ err, message: "Set nickname failed" });
+    });
 });
 
 app.get("/inspect-rooms", (req, res) => {
@@ -197,7 +229,7 @@ const createParentToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity,
-      metadata: JSON.stringify({type: "PARENT"}),
+      metadata: JSON.stringify({ type: "PARENT" }),
     }
   );
   at.addGrant({
@@ -215,7 +247,7 @@ const createChildToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity,
-      metadata: JSON.stringify({type: "CHILD"}),
+      metadata: JSON.stringify({ type: "CHILD" }),
     }
   );
   at.addGrant({
@@ -233,7 +265,7 @@ const createViewerToken = (identity, room) => {
     process.env.LIVEKIT_API_SECRET,
     {
       identity: uuid.v4(),
-      metadata: JSON.stringify({type: "VIEWER"}),
+      metadata: JSON.stringify({ type: "VIEWER" }),
     }
   );
   at.addGrant({
@@ -244,3 +276,4 @@ const createViewerToken = (identity, room) => {
   });
   return (token = at.toJwt());
 };
+
