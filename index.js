@@ -1,21 +1,42 @@
-const livekitApi = require("livekit-server-api");
+/*@prettier */
 require("dotenv").config();
-const AccessToken = livekitApi.AccessToken;
-const RoomServiceClient = livekitApi.RoomServiceClient;
 const express = require("express");
 const cors = require("cors");
-const generateRoomNames = require("./util/generateRoomNames");
 const uuid = require("uuid");
+const _ = require("lodash");
+
+const livekitApi = require("livekit-server-api");
+const AccessToken = livekitApi.AccessToken;
+const RoomServiceClient = livekitApi.RoomServiceClient;
+
+const generateRoomNames = require("./util/generateRoomNames");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 //TODO: Frontdesk needs persistent data layer
+// e.g. save to a database
+
 const FrontDesk = {
   _rooms: [],
+
   addRoom: function ({ room, passcode }) {
     this._rooms.push({ name: room, passcode });
+  },
+
+  setMix: function ({ room, childSid, mix }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    if (!_room.mix) {
+      _room.mix = {};
+    }
+    _room.mix[childSid] = mix;
+    return this.getMix({ room, childSid });
+  },
+
+  getMix: function ({ room, childSid }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    return _.get(_room, `mix['${childSid}']`, null);
   },
 
   hasRoom: function ({ room }) {
@@ -25,6 +46,7 @@ const FrontDesk = {
   inspectRooms: function () {
     return this._rooms;
   },
+
   accessRoom: function ({ room: roomName, passcode }) {
     const _room = this._rooms.find((room) => room.name === roomName);
     if (!_room) {
@@ -39,6 +61,25 @@ const svc = new RoomServiceClient(
   process.env.LIVEKIT_API_KEY,
   process.env.LIVEKIT_API_SECRET
 );
+
+app.post("/:room/:child_sid/layout", (req, res) => {});
+
+app.get("/:room/:child_sid/mix", (req, res) => {
+  const roomName = req.params.room;
+  const childSid = req.params.child_sid;
+
+  let mixState = FrontDesk.getMix({ room: roomName, childSid });
+
+  res.send({ mix: mixState });
+});
+
+app.post("/:room/:child_sid/mix", (req, res) => {
+  const roomName = req.params.room;
+  const childSid = req.params.child_sid;
+  const mix = req.body.mix;
+
+  res.send({ mix: FrontDesk.setMix({ room: roomName, childSid, mix }) });
+});
 
 app.post("/session/new", (req, res) => {
   // TODO: validate with secret in header?
@@ -145,7 +186,7 @@ app.post(
       });
       return;
     }
-          */
+    */
 
       if (!FrontDesk.accessRoom({ room, passcode })) {
         res.status(403).send({
@@ -221,8 +262,6 @@ app.get("/inspect-rooms", (req, res) => {
   res.send(FrontDesk.inspectRooms());
 });
 
-app.listen(3001);
-
 const createParentToken = (identity, room) => {
   const at = new AccessToken(
     process.env.LIVEKIT_API_KEY,
@@ -277,3 +316,4 @@ const createViewerToken = (identity, room) => {
   return (token = at.toJwt());
 };
 
+app.listen(3001);
