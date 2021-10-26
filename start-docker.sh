@@ -1,0 +1,1 @@
+docker run -d --name=livekit -v /home/argos/config.yaml:/config.yaml -v /etc/letsencrypt/live/turn.argos.studio:/cert/live/turn.argos.studio:ro -v /etc/letsencrypt/archive/turn.argos.studio:/cert/archive/turn.argos.studio:ro --network host livekit/livekit-server:v0.12 --node-ip=139.162.12.219 --config config.yaml --dev
