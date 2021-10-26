@@ -45,8 +45,22 @@ const FrontDesk = {
       _room.mix = {};
     }
     _room.mix[nickname] = mix;
-    //fire data event to this child
     return this.getMix({ room, nickname });
+  },
+
+  saveMix: function ({ room, slot }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    let _mix = { ..._.get(_room, "mix", {}) };
+    if (!_room.mixSlots) {
+      _room.mixSlots = {};
+    }
+    _room.mixSlots[`slot${slot}`] = _mix;
+  },
+
+  loadMix: function ({ room, slot }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    let _mix = { ..._.get(_room, `mixSlots["slot${slot}"]`, {}) };
+    _room.mix = _mix;
   },
 
   getLayout: function ({ room, nickname }) {
@@ -60,12 +74,23 @@ const FrontDesk = {
       _room.layout = {};
     }
     _room.layout[nickname] = layout;
-    //fire data event to this child
-    //
     return this.getLayout({ room, nickname });
   },
 
-  fireMix: function ({ room, nickname }) {},
+  saveLayout: function ({ room, slot }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    let _layout = { ..._.get(_room, "layout", {}) };
+    if (!_room.layoutSlots) {
+      _room.layoutSlots = {};
+    }
+    _room.layoutSlots[`slot${slot}`] = _layout;
+  },
+
+  loadLayout: function ({ room, slot }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    let _layout = { ..._.get(_room, `layoutSlots["slot${slot}"]`, {}) };
+    _room.layout = _layout;
+  },
 
   hasRoom: function ({ room }) {
     return this._rooms.findIndex((r) => r.name === room) > -1;
@@ -101,6 +126,34 @@ app.post("/:room/:nickname/layout", (req, res) => {
   res.send({
     layout: FrontDesk.setLayout({ room: roomName, nickname, layout }),
   });
+});
+
+app.post("/:room/mix/save/:slot", (req, res) => {
+  const slot = req.params.slot;
+  const roomName = req.params.room;
+  FrontDesk.saveMix({ room: roomName, slot });
+  res.send({ received: true });
+});
+
+app.post("/:room/mix/load/:slot", (req, res) => {
+  const slot = req.params.slot;
+  const roomName = req.params.room;
+  FrontDesk.loadMix({ room: roomName, slot });
+  res.send({ received: true });
+});
+
+app.post("/:room/layout/save/:slot", (req, res) => {
+  const slot = req.params.slot;
+  const roomName = req.params.room;
+  FrontDesk.saveLayout({ room: roomName, slot });
+  res.send({ received: true });
+});
+
+app.post("/:room/layout/load/:slot", (req, res) => {
+  const slot = req.params.slot;
+  const roomName = req.params.room;
+  FrontDesk.loadLayout({ room: roomName, slot });
+  res.send({ received: true });
 });
 
 app.get("/:room/:nickname/mix", (req, res) => {
