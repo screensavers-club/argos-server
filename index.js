@@ -5,9 +5,9 @@ const cors = require("cors");
 const uuid = require("uuid");
 const _ = require("lodash");
 
-const livekitApi = require("livekit-server-api");
-const AccessToken = livekitApi.AccessToken;
-const RoomServiceClient = livekitApi.RoomServiceClient;
+const LivekitSdk = require("livekit-server-sdk");
+const AccessToken = LivekitSdk.AccessToken;
+const RoomServiceClient = LivekitSdk.RoomServiceClient;
 
 const generateRoomNames = require("./util/generateRoomNames");
 
@@ -15,8 +15,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const svc = new RoomServiceClient(
+  process.env.LIVEKIT_HOST,
+  process.env.LIVEKIT_API_KEY,
+  process.env.LIVEKIT_API_SECRET
+);
+
 //TODO: Frontdesk needs persistent data layer
 // e.g. save to a database
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 const FrontDesk = {
   _rooms: [],
@@ -25,19 +34,38 @@ const FrontDesk = {
     this._rooms.push({ name: room, passcode });
   },
 
-  setMix: function ({ room, childSid, mix }) {
+  getMix: function ({ room, nickname }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    return _.get(_room, `mix['${nickname}']`, null);
+  },
+
+  setMix: function ({ room, nickname, mix }) {
     let _room = this._rooms.find((r) => r.name === room);
     if (!_room.mix) {
       _room.mix = {};
     }
-    _room.mix[childSid] = mix;
-    return this.getMix({ room, childSid });
+    _room.mix[nickname] = mix;
+    //fire data event to this child
+    return this.getMix({ room, nickname });
   },
 
-  getMix: function ({ room, childSid }) {
+  getLayout: function ({ room, nickname }) {
     let _room = this._rooms.find((r) => r.name === room);
-    return _.get(_room, `mix['${childSid}']`, null);
+    return _.get(_room, `layout['${nickname}']`, null);
   },
+
+  setLayout: function ({ room, nickname, layout }) {
+    let _room = this._rooms.find((r) => r.name === room);
+    if (!_room.layout) {
+      _room.layout = {};
+    }
+    _room.layout[nickname] = layout;
+    //fire data event to this child
+    //
+    return this.getLayout({ room, nickname });
+  },
+
+  fireMix: function ({ room, nickname }) {},
 
   hasRoom: function ({ room }) {
     return this._rooms.findIndex((r) => r.name === room) > -1;
@@ -56,29 +84,40 @@ const FrontDesk = {
   },
 };
 
-const svc = new RoomServiceClient(
-  process.env.LIVEKIT_HOST,
-  process.env.LIVEKIT_API_KEY,
-  process.env.LIVEKIT_API_SECRET
-);
-
-app.post("/:room/:child_sid/layout", (req, res) => {});
-
-app.get("/:room/:child_sid/mix", (req, res) => {
+app.get("/:room/:nickname/layout", (req, res) => {
   const roomName = req.params.room;
-  const childSid = req.params.child_sid;
+  const nickname = req.params.nickname;
 
-  let mixState = FrontDesk.getMix({ room: roomName, childSid });
+  let layout = FrontDesk.getLayout({ room: roomName, nickname });
+
+  res.send({ layout });
+});
+
+app.post("/:room/:nickname/layout", (req, res) => {
+  const roomName = req.params.room;
+  const nickname = req.params.nickname;
+  const layout = req.body.layout;
+
+  res.send({
+    layout: FrontDesk.setLayout({ room: roomName, nickname, layout }),
+  });
+});
+
+app.get("/:room/:nickname/mix", (req, res) => {
+  const roomName = req.params.room;
+  const nickname = req.params.nickname;
+
+  let mixState = FrontDesk.getMix({ room: roomName, nickname });
 
   res.send({ mix: mixState });
 });
 
-app.post("/:room/:child_sid/mix", (req, res) => {
+app.post("/:room/:nickname/mix", (req, res) => {
   const roomName = req.params.room;
-  const childSid = req.params.child_sid;
+  const nickname = req.params.nickname;
   const mix = req.body.mix;
 
-  res.send({ mix: FrontDesk.setMix({ room: roomName, childSid, mix }) });
+  res.send({ mix: FrontDesk.setMix({ room: roomName, nickname, mix }) });
 });
 
 app.post("/session/new", (req, res) => {
@@ -89,7 +128,9 @@ app.post("/session/new", (req, res) => {
 
 app.get("/rooms", (req, res) => {
   svc.listRooms().then((result) => {
-    const rooms = result;
+    const rooms = result.filter((room) => {
+      return FrontDesk.hasRoom({ room: room.name });
+    });
     Promise.all(
       rooms.map(({ name }) => {
         return svc.listParticipants(name).then((participants) => ({
@@ -101,7 +142,6 @@ app.get("/rooms", (req, res) => {
       })
     )
       .then((results) => {
-        console.log(results);
         res.send(results);
       })
       .catch((err) => res.status(500).send({ err }));
@@ -210,30 +250,6 @@ app.post(
   }
 );
 
-app.post("/parent/participant/set-delay", (req, res) => {
-  let { id, delay, room } = req.body;
-  console.log({ id, delay, room });
-  svc
-    .getParticipant(room, id)
-    .then((child) => {
-      let _md = JSON.parse(child.metadata);
-      svc
-        .updateParticipant(
-          room,
-          id,
-          JSON.stringify({
-            ..._md,
-            audio_delay: delay,
-          })
-        )
-        .then((result) => {
-          console.log(result);
-          res.status(200).send({ success: true });
-        });
-    })
-    .catch((err) => res.status(400).send({ err }));
-});
-
 app.post("/child/participant/set-nickname", (req, res) => {
   let { nickname, identity, room } = req.body;
   svc
@@ -244,7 +260,6 @@ app.post("/child/participant/set-nickname", (req, res) => {
     )
     .then((result) => {
       if (result) {
-        console.log({ type: "CHILD", nickname });
         res.status(200).send({ success: true });
         return;
       } else {
